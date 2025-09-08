@@ -1,0 +1,19 @@
+import pandas as pd
+import duckdb
+
+def load_and_clean_data():
+    estoque = pd.read_csv('data/estoque.csv')
+    devolucoes = pd.read_csv('data/devolucoes.csv')
+    inventario = pd.read_csv('data/inventario.csv')
+
+    # Normalização básica
+    estoque.columns = estoque.columns.str.lower().str.replace(' ', '_')
+    devolucoes.columns = devolucoes.columns.str.lower().str.replace(' ', '_')
+    inventario.columns = inventario.columns.str.lower().str.replace(' ', '_')
+
+    # Salvar em DuckDB
+    con = duckdb.connect(database='retail.duckdb', read_only=False)
+    con.execute("CREATE OR REPLACE TABLE estoque AS SELECT * FROM estoque")
+    con.execute("CREATE OR REPLACE TABLE devolucoes AS SELECT * FROM devolucoes")
+    con.execute("CREATE OR REPLACE TABLE inventario AS SELECT * FROM inventario")
+    con.close()
