@@ -1,0 +1,16 @@
+from fastapi import APIRouter, UploadFile, File
+from ingestion.loader import load_and_clean_data
+
+router = APIRouter()
+
+@router.post("/upload")
+async def upload_csv(file: UploadFile = File(...)):
+    contents = await file.read()
+    with open(f"data/{file.filename}", "wb") as f:
+        f.write(contents)
+    return {"filename": file.filename}
+
+@router.get("/load")
+def load_data():
+    load_and_clean_data()
+    return {"status": "Dados carregados e normalizados"}
