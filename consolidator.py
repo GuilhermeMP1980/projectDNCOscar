@@ -8,7 +8,7 @@ def load_csv_files():
     devolucao = pd.read_csv(os.path.join(DATA_DIR, "devolucao.csv"))
     cancelamento = pd.read_csv(os.path.join(DATA_DIR, "cancelamento.csv"))
     ajustes_estoque = pd.read_csv(os.path.join(DATA_DIR, "ajustes_estoque.csv"))
-    return estoque, devolucoes, inventario
+    return devolucao, cancelamento, ajustes_estoque
 
 def normalize_dataframe(df):
     """Padroniza colunas e tipos de dados."""
@@ -22,8 +22,8 @@ def consolidate_data(devolucao, cancelamento, ajustes_estoque):
     df_ajustes_estoque = normalize_dataframe(ajustes_estoque)
 
     # Mescla por produto_id
-    df = df_estoque.merge(df_inventario, on="produto_id", how="outer")
-    df = df.merge(df_devolucoes, on="produto_id", how="outer")
+    df = df_cancelamento.merge(df_ajustes_estoque, on="produto_id", how="outer")
+    df = df.merge(df_devolucao, on="produto_id", how="outer")
     return df
 
 def save_consolidated(df, filename="consolidado.csv"):
