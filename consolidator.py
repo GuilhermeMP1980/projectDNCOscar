@@ -33,6 +33,6 @@ def save_consolidated(df, filename="consolidado.csv"):
     print(f"Arquivo salvo em: {output_path}")
 
 if __name__ == "__main__":
-    estoque, devolucoes, inventario = load_csv_files()
+    devolucao, cancelamento, ajustes_estoque = load_csv_files()
     consolidado = consolidate_data(devolucao, cancelamento, ajustes_estoque)
     save_consolidated(consolidado)
