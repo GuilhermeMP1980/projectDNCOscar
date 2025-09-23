@@ -1,7 +1,6 @@
 import hashlib
 import base64
 import json
-import math
 from typing import List, Callable
 
 def hash_sha256(text: str) -> str:
