@@ -57,3 +57,20 @@ grafo.add_node("listar_suspeitos", listar_suspeitos)
 grafo.set_entry_point("consultar_skus_por_estoque")  # ou outro conforme o uso
 
 app = grafo.compile()
+
+# Consulta SKUs por estoque
+resposta = app.invoke({"grafo": G, "estoque": "Estoque_1"})
+print(resposta["resultado"])
+
+# Consulta estoques compartilhados
+resposta = app.invoke({"grafo": G, "sku1": "SKU_1", "sku2": "SKU_2"}, entry_point="consultar_estoques_compartilhados")
+print(resposta["resultado"])
+
+# Consulta similaridade
+resposta = app.invoke({"grafo": G, "sku1": "SKU_1", "sku2": "SKU_2"}, entry_point="consultar_similaridade")
+print(resposta["resultado"])
+
+# Lista suspeitos
+resposta = app.invoke({"grafo": G}, entry_point="listar_suspeitos")
+print(resposta["resultado"])
+
