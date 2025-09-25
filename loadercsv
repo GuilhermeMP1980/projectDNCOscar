@@ -1,19 +1,129 @@
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.security import OAuth2PasswordBearer
+from pydantic import BaseModel
+from sqlalchemy import create_engine, Column, String, JSON
+from sqlalchemy.orm import sessionmaker, declarative_base, Session
+from passlib.context import CryptContext
+from jose import jwt, JWTError
+from langgraph.graph import StateGraph
 import pandas as pd
 import duckdb
+import os
 
+# ============================
+# 1. Configurações
+# ============================
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://usuario:senha@localhost:5432/meubanco")
+SECRET_KEY = "sua-chave-secreta"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(bind=engine)
+Base = declarative_base()
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+# ============================
+# 2. Modelos SQLAlchemy
+# ============================
+class Usuario(Base):
+    __tablename__ = "usuarios"
+    email = Column(String, primary_key=True, index=True)
+    senha_hash = Column(String)
+
+class SessaoAgente(Base):
+    __tablename__ = "sessao_agente"
+    id = Column(String, primary_key=True)
+    estado = Column(JSON)
+
+Base.metadata.create_all(bind=engine)
+
+# ============================
+# 3. Utilitários de segurança
+# ============================
+def gerar_hash(senha): return pwd_context.hash(senha)
+def verificar_senha(senha, hash): return pwd_context.verify(senha, hash)
+def criar_token(email):
+    from datetime import datetime, timedelta
+    exp = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode({"sub": email, "exp": exp}, SECRET_KEY, algorithm=ALGORITHM)
+def validar_token(token: str): 
+    try: return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])["sub"]
+    except JWTError: return None
+
+# ============================
+# 4. Loader de dados
+# ============================
 def load_and_clean_data():
-    estoque = pd.read_csv('data/estoque.csv')
-    devolucoes = pd.read_csv('data/devolucoes.csv')
-    inventario = pd.read_csv('data/inventario.csv')
-
-    # Normalização básica
-    estoque.columns = estoque.columns.str.lower().str.replace(' ', '_')
-    devolucoes.columns = devolucoes.columns.str.lower().str.replace(' ', '_')
-    inventario.columns = inventario.columns.str.lower().str.replace(' ', '_')
-
-    # Salvar em DuckDB
     con = duckdb.connect(database='retail.duckdb', read_only=False)
-    con.execute("CREATE OR REPLACE TABLE estoque AS SELECT * FROM estoque")
-    con.execute("CREATE OR REPLACE TABLE devolucoes AS SELECT * FROM devolucoes")
-    con.execute("CREATE OR REPLACE TABLE inventario AS SELECT * FROM inventario")
+    for name in ['estoque', 'devolucoes', 'inventario']:
+        df = pd.read_csv(f'data/{name}.csv')
+        df.columns = df.columns.str.lower().str.replace(' ', '_')
+        con.execute(f"CREATE OR REPLACE TABLE {name} AS SELECT * FROM df")
     con.close()
+
+# ============================
+# 5. Nó LangGraph
+# ============================
+def carregar_dados_node(state: dict) -> dict:
+    load_and_clean_data()
+    state["dados_carregados"] = True
+    state["historico"].append("carregar_dados")
+    return state
+
+graph = StateGraph(dict)
+graph.add_node("carregar_dados", carregar_dados_node)
+graph.set_entry_point("carregar_dados")
+app_graph = graph.compile()
+
+# ============================
+# 6. FastAPI
+# ============================
+app = FastAPI()
+
+class Credenciais(BaseModel):
+    email: str
+    senha: str
+
+class EntradaAgente(BaseModel):
+    id_sessao: str
+
+def get_db(): db = SessionLocal(); try: yield db; finally: db.close()
+
+@app.post("/cadastro")
+def cadastrar(cred: Credenciais, db: Session = Depends(get_db)):
+    if db.query(Usuario).filter_by(email=cred.email).first():
+        raise HTTPException(status_code=400, detail="Usuário já existe")
+    db.add(Usuario(email=cred.email, senha_hash=gerar_hash(cred.senha)))
+    db.commit()
+    return {"msg": "Cadastro realizado"}
+
+@app.post("/login")
+def login(cred: Credenciais, db: Session = Depends(get_db)):
+    user = db.query(Usuario).filter_by(email=cred.email).first()
+    if not user or not verificar_senha(cred.senha, user.senha_hash):
+        raise HTTPException(status_code=401, detail="Credenciais inválidas")
+    return {"access_token": criar_token(user.email), "token_type": "bearer"}
+
+@app.post("/executar")
+def executar_agente(entrada: EntradaAgente, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    email = validar_token(token)
+    if not email:
+        raise HTTPException(status_code=401, detail="Token inválido")
+    estado = {"historico": [], "usuario": email}
+    final = app_graph.invoke(estado)
+    db.merge(SessaoAgente(id=entrada.id_sessao, estado=final))
+    db.commit()
+    return {"estado": final}
+
+@app.get("/sessao/{id}")
+def recuperar_sessao(id: str, db: Session = Depends(get_db)):
+    sessao = db.get(SessaoAgente, id)
+    if not sessao:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+    return {"estado": sessao.estado}
+
+@app.get("/saude")
+def saude(): return {"status": "ok"}
+
