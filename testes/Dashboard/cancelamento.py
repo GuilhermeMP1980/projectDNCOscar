@@ -30,3 +30,33 @@ with st.sidebar:
     if "SKU" in df.columns:
         skus = df["SKU"].dropna().unique()
         sku_selecionado = st.multiselect("Filtrar por SKU", skus)
+        if sku_selecionado:
+            df = df[df["SKU"].isin(sku_selecionado)]
+
+# Métricas principais
+st.subheader("Métricas Gerais")
+col1, col2, col3 = st.columns(3)
+col1.metric("Total cancelado (R$)", f"{df['VALORBRUTO'].sum():,.2f}")
+col2.metric("Total de cancelamentos", f"{len(df)} registros")
+col3.metric("SKUs únicos", f"{df['SKU'].nunique()}")
+
+# Gráfico: cancelamentos por loja
+st.subheader("Cancelamentos por loja")
+cancel_por_loja = df["LOJA"].value_counts().reset_index()
+cancel_por_loja.columns = ["LOJA", "Cancelamentos"]
+fig1 = px.bar(cancel_por_loja, x="LOJA", y="Cancelamentos", title="Total de cancelamentos por loja", text_auto=True)
+st.plotly_chart(fig1, use_container_width=True)
+
+# Gráfico: SKUs mais cancelados
+st.subheader("SKUs mais cancelados")
+sku_top = df["SKU"].value_counts().reset_index().rename(columns={"index": "SKU", "SKU": "Quantidade"})
+fig2 = px.bar(sku_top.head(10), x="SKU", y="Quantidade", title="Top 10 SKUs por cancelamento", text_auto=True)
+st.plotly_chart(fig2, use_container_width=True)
+
+# Exportar dados
+st.subheader("Exportar dados filtrados")
+st.download_button("Exportar CSV", df.to_csv(index=False), file_name="cancelamentos_filtrados.csv")
+
+# Tabela completa
+st.subheader("Tabela de dados filtrados")
+st.dataframe(df, use_container_width=True)
