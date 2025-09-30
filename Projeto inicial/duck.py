@@ -7,43 +7,45 @@ DATA_DIR = Path("data")
 ARQUIVOS = {
     "devolucao": "devolucao_2025.csv",
     "cancelamento": "cancelamento_2025.csv",
-    "ajustes": "ajustes_estoque_2025.csv"
+    "ajustes": "ajustes_estoque_2025.csv",
+    "inventario": "inventario_062025.csv"  # exemplo de um mês
 }
 
 def carregar_csv(tipo: str) -> pd.DataFrame:
     caminho = DATA_DIR / ARQUIVOS[tipo]
     try:
-        df = pd.read_csv(caminho)
-        return df
+        return pd.read_csv(caminho)
     except FileNotFoundError:
         print(f"Arquivo não encontrado: {caminho}")
         return pd.DataFrame()
 
-def devolucao_2025() -> str:
+def resumo_devolucao() -> str:
     df = carregar_csv("devolucao")
     if df.empty:
         return "Nenhuma devolução registrada."
 
     total = len(df)
-    produtos = df["produto"].value_counts().head(3).to_dict()
-    return f"Foram registradas {total} devoluções. Principais produtos devolvidos: {produtos}"
+    produtos = df["SKU"].value_counts().head(3).to_dict()
+    valor_total = df["VALORDEVPRODUTO"].sum()
+    return f"Foram registradas {total} devoluções, totalizando R$ {valor_total:.2f}. Principais SKUs devolvidos: {produtos}"
 
-def cancelamento_2025() -> str:
+def resumo_cancelamento() -> str:
     df = carregar_csv("cancelamento")
     if df.empty:
         return "Nenhum cancelamento registrado."
 
     total = len(df)
-    motivos = df["motivo_cancelamento"].value_counts().to_dict()
-    return f"Foram registrados {total} cancelamentos. Motivos mais comuns: {motivos}"
+    mais_comuns = df["IDCONDICAOPAGAMENTO"].value_counts().head(3).to_dict()
+    valor_total = df["VALORBRUTO"].sum()
+    return f"Foram registrados {total} cancelamentos, somando R$ {valor_total:.2f}. Condições de pagamento mais comuns: {mais_comuns}"
 
-def ajustes_estoque_2025() -> str:
+def resumo_ajustes() -> str:
     df = carregar_csv("ajustes")
     if df.empty:
         return "Nenhum ajuste de estoque registrado."
 
     total = len(df)
-    tipos = df["tipo_ajuste"].value_counts().to_dict()
+    tipos = df["TIPO_AJUSTE"].value_counts().to_dict()
     return f"Foram feitos {total} ajustes de estoque. Tipos mais frequentes: {tipos}"
 
 def cruzar_dados() -> pd.DataFrame:
@@ -54,12 +56,11 @@ def cruzar_dados() -> pd.DataFrame:
     if df1.empty or df2.empty or df3.empty:
         print("Um ou mais arquivos estão vazios. Cruzamento parcial.")
 
-    # Agregação para evitar duplicações
-    df1 = df1.groupby("produto").agg({"quantidade_vendida": "sum"}).reset_index()
-    df2 = df2.groupby("produto").agg({"motivo_cancelamento": "first"}).reset_index()
-    df3 = df3.groupby("produto").agg({
-        "tipo_ajuste": "first",
-        "quantidade_ajustada": "sum"
+    df1 = df1.groupby("SKU").agg({"VALORDEVPRODUTO": "sum"}).reset_index()
+    df2 = df2.groupby("SKU").agg({"VALORBRUTO": "sum"}).reset_index()
+    df3 = df3.groupby("SKU").agg({
+        "TIPO_AJUSTE": "first",
+        "QTDE_AJUSTE": "sum"
     }).reset_index()
 
     con = duckdb.connect()
@@ -69,14 +70,14 @@ def cruzar_dados() -> pd.DataFrame:
 
     query = """
         SELECT 
-            d.produto, 
-            d.quantidade_vendida, 
-            c.motivo_cancelamento, 
-            a.tipo_ajuste, 
-            a.quantidade_ajustada
+            d.SKU, 
+            d.VALORDEVPRODUTO, 
+            c.VALORBRUTO, 
+            a.TIPO_AJUSTE, 
+            a.QTDE_AJUSTE
         FROM devolucao d
-        LEFT JOIN cancelamento c ON d.produto = c.produto
-        LEFT JOIN ajustes a ON d.produto = a.produto
+        LEFT JOIN cancelamento c ON d.SKU = c.SKU
+        LEFT JOIN ajustes a ON d.SKU = a.SKU
     """
 
     try:
