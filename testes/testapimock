@@ -1,0 +1,54 @@
+import pytest
+from unittest.mock import patch
+from app import app
+import pandas as pd
+
+@pytest.fixture
+def client():
+    app.config["TESTING"] = True
+    with app.test_client() as client:
+        yield client
+
+def mock_devolucao():
+    return pd.DataFrame({
+        "SKU": ["A", "B", "A", "C", "B"],
+        "VALORDEVPRODUTO": [100, 200, 150, 50, 100]
+    })
+
+def mock_cancelamento():
+    return pd.DataFrame({
+        "SKU": ["A", "B", "C"],
+        "VALORBRUTO": [300, 400, 500],
+        "IDCONDICAOPAGAMENTO": [1, 2, 1]
+    })
+
+def mock_ajustes():
+    return pd.DataFrame({
+        "SKU": ["A", "B", "C"],
+        "TIPO_AJUSTE": ["entrada", "saída", "entrada"],
+        "QTDE_AJUSTE": [10, -5, 20]
+    })
+
+@patch("app.carregar_csv", side_effect=lambda tipo: mock_devolucao() if tipo == "devolucao" else
+                                             mock_cancelamento() if tipo == "cancelamento" else
+                                             mock_ajustes() if tipo == "ajustes" else pd.DataFrame())
+def test_resumo_devolucao_mock(mock_csv, client):
+    response = client.post("/resumo", json={"tipo": "devolucao"})
+    data = response.get_json()
+    assert "resposta" in data
+    assert "principais_SKUs" in data
+    assert data["principais_SKUs"] == {"A": 2, "B": 2, "C": 1}
+
+@patch("app.carregar_csv", side_effect=lambda tipo: mock_cancelamento() if tipo == "cancelamento" else pd.DataFrame())
+def test_resumo_cancelamento_mock(mock_csv, client):
+    response = client.post("/resumo", json={"tipo": "cancelamento"})
+    data = response.get_json()
+    assert "condicoes_mais_comuns" in data
+    assert data["condicoes_mais_comuns"] == {1: 2, 2: 1}
+
+@patch("app.carregar_csv", side_effect=lambda tipo: mock_ajustes() if tipo == "ajustes" else pd.DataFrame())
+def test_resumo_ajustes_mock(mock_csv, client):
+    response = client.post("/resumo", json={"tipo": "ajustes"})
+    data = response.get_json()
+    assert "tipos_mais_frequentes" in data
+    assert data["tipos_mais_frequentes"] == {"entrada": 2, "saída": 1}
