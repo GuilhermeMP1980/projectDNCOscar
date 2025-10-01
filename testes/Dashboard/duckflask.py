@@ -10,7 +10,7 @@ ARQUIVOS = {
     "devolucao": "devolucao_2025.csv",
     "cancelamento": "cancelamento_2025.csv",
     "ajustes": "ajustes_estoque_2025.csv",
-    "inventario": "inventario_062025.csv"
+    "inventario": "inventario_06_2025.csv"
 }
 
 def carregar_csv(tipo: str) -> pd.DataFrame:
