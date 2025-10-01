@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request 
+from fastapi import Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -9,7 +10,6 @@ import logging
 import os
 import traceback
 import csv
-
 from dotenv import load_dotenv
 from loader import conectar_postgres, carregar_e_normalizar
 from indexvectorstore import register_vector
@@ -167,6 +167,53 @@ async def importar_via_api():
         return JSONResponse(content={"status": "Importação concluída com sucesso."})
     except Exception as e:
         logger.error(f"Erro na importação via API: {e}")
+        return JSONResponse(status_code=500, content={
+            "error": str(e),
+            "trace": traceback.format_exc()
+        })
+
+@app.post("/n8n-bot")
+async def n8n_bot_endpoint(payload: dict = Body(...)):
+    try:
+        pergunta = payload.get("pergunta", "")
+        usar_grafo = payload.get("usar_grafo", False)
+        sku = payload.get("sku")
+        loja = payload.get("loja")
+        cliente = payload.get("cliente")
+        nota_fiscal = payload.get("nota_fiscal")
+
+        resultado = responder(
+            pergunta=pergunta,
+            usar_grafo=usar_grafo,
+            sku=sku,
+            loja=loja,
+            cliente=cliente,
+            nota_fiscal=nota_fiscal
+        )
+
+        # Aciona fluxo n8n com a resposta
+        acionar_fluxo_n8n({
+            "pergunta": pergunta,
+            "resposta": resultado["resposta"],
+            "sku": sku,
+            "loja": loja,
+            "cliente": cliente,
+            "nota_fiscal": nota_fiscal
+        })
+
+        return JSONResponse(content={
+            "resposta": resultado["resposta"],
+            "grafico": bool(resultado.get("grafico")),
+            "dados": {
+                "sku": sku,
+                "loja": loja,
+                "cliente": cliente,
+                "nota_fiscal": nota_fiscal
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Erro no bot do n8n: {e}")
         return JSONResponse(status_code=500, content={
             "error": str(e),
             "trace": traceback.format_exc()
