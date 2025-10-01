@@ -10,6 +10,11 @@ ARQUIVOS = {
     "devolucao": "devolucao_2025.csv",
     "cancelamento": "cancelamento_2025.csv",
     "ajustes": "ajustes_estoque_2025.csv",
+    "inventario": "inventario_01_2025.csv",
+    "inventario": "inventario_02_2025.csv",
+    "inventario": "inventario_03_2025.csv",
+    "inventario": "inventario_04_2025.csv",
+    "inventario": "inventario_05_2025.csv",
     "inventario": "inventario_06_2025.csv"
 }
 
